@@ -2,10 +2,10 @@ require 'uri'
 require 'json'
 require 'net/https'
 
-# spark, a tiny Campfire library
+# sparks, a tiny Campfire library
 
 # Usage:
-#   c = Spark::Campfire.new('subdomain', 'abc123')
+#   c = Sparks::Campfire.new('subdomain', 'abc123')
 #   r = c.room_named "Room Name"
 #   r.say "hi there"
 #   r.paste "class Foo\nend"
@@ -14,7 +14,7 @@ require 'net/https'
 #  Andre Arko <andre@arko.net>
 #  Aaron Patterson <aaron.patterson@gmail.com>
 
-module Spark
+module Sparks
   class Room
     attr_accessor :id
 
