@@ -13,6 +13,7 @@ Gem::Specification.new do |s|
   s.description = %q{A tiny Campfire client API that only uses the standard library}
 
   s.rubyforge_project = "sparks"
+  s.add_dependency "json"
   s.add_development_dependency "bundler", "~>1.0"
 
   s.files         = `git ls-files`.split("\n")
