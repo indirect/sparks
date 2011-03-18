@@ -43,7 +43,6 @@ module Sparks
       @http             = Net::HTTP.new(uri.host, uri.port)
       @http.use_ssl     = true
       @http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-      @http.ca_file     = File.expand_path("../rapidssl.crt", __FILE__)
     end
 
     def room_named name
