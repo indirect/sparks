@@ -9,11 +9,6 @@ require 'net/https'
 #   r = c.room_named "Room Name"
 #   r.say "hi there"
 #   r.paste "class Foo\nend"
-
-# Authors:
-#  Andre Arko <andre@arko.net>
-#  Aaron Patterson <aaron.patterson@gmail.com>
-
 module Sparks
   class Room
     attr_accessor :id
