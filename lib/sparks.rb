@@ -82,6 +82,14 @@ module Sparks
       post room_id, message, 'PasteMessage'
     end
 
+    def play room_id, message
+      post room_id, message, 'SoundMessage'
+    end
+    
+    def tweet room_id, message
+      post room_id, message, 'TweetMessage'
+    end
+
     def join room_id
       @http.start do |http|
         req = Net::HTTP::Post.new "/room/#{room_id}/join.xml"
