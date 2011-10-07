@@ -1,5 +1,9 @@
 # Sparks changelog
 
+## Version 0.3 (6 October 2011)
+
+  - added support for play and tweet message types
+
 ## Version 0.2 (29 April 2011)
 
   - I give up. Add the CA certs needed to verify Campfire's SSL cert.
