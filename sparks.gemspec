@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.name        = "sparks"
   s.version     = Sparks::VERSION
   s.platform    = Gem::Platform::RUBY
-  s.authors     = ["André Arko", "James Cox"]
+  s.authors     = ["André Arko"]
   s.email       = ["andre@arko.net"]
   s.homepage    = "http://github.com/indirect/sparks"
   s.summary     = %q{A tiny Campfire client API}
