@@ -20,16 +20,38 @@ module Sparks
       @id   = id
     end
 
+    def speak(message)
+      @api.post id, message, 'TextMessage'
+    end
+    alias_method :say, :speak
+
+    def paste(message)
+      @api.post id, message, 'PasteMessage'
+    end
+
+    def play(message)
+      @api.post id, message, 'SoundMessage'
+    end
+
+    def tweet(message)
+      @api.post id, message, 'TweetMessage'
+    end
+
+    def join
+      @api.req("/room/#{id}/join.json")
+    end
+
+    def watch
+      puts "GONNA JOIN"
+      join
+      puts "zomg I'm in"
+      @api.watch(id){|message| yield message }
+    end
+
     def inspect
       %|#<Sparks::Room:#{object_id} @name=#{name.inspect} @id=#{id.inspect}>|
     end
 
-    def method_missing method, *args, &block
-      if @api.respond_to? method
-        args.unshift(@id)
-        @api.send method, *args, &block
-      end
-    end
   end
 
   class Campfire
@@ -49,16 +71,13 @@ module Sparks
     end
 
     def room_named(name)
-      r = room_data.find{|r| r["name"] == name }
-      r ? Room.new(self, name, r["id"]) : nil
+      rooms.find{|r| r.name == name }
     end
 
     def rooms
-      room_data.map{|d| Room.new(self, d["name"], d["id"]) }
-    end
-
-    def room_data
-      req("/rooms.json")["rooms"]
+      req("/rooms.json")["rooms"].map do |d|
+        Room.new(self, d["name"], d["id"])
+      end
     end
 
     def post(room_id, message, type = nil)
@@ -66,6 +85,24 @@ module Sparks
       data.merge!('type' => type) if type
       json = JSON.generate('message' => data)
       req("/room/#{room_id}/speak.json", json)
+    end
+
+    def watch(room_id)
+      @streamer.start do |http|
+        req = Net::HTTP::Get.new "/room/#{room_id}/live.json"
+        req.basic_auth @token, @pass
+        http.request(req) do |res|
+          res.read_body do |chunk|
+            next if chunk.strip.empty?
+            chunk.split("\r").each do |message|
+              yield JSON.parse(message)
+            end
+          end
+        end
+      end
+    rescue => e
+      puts "gotta retry :("
+      raise e
     end
 
   private
