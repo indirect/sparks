@@ -31,23 +31,22 @@ module Sparks
     attr_reader :uri, :token, :pass
 
     def initialize subdomain, token, opts = {}
-      @uri   = URI.parse("https://#{subdomain}.campfirenow.com")
-      @token = token
-      @pass  = 'x'
-
-      @http             = Net::HTTP.new(uri.host, uri.port)
-      @http.use_ssl     = true
-      @http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-      campfire_ca_certs = File.expand_path("../rapidssl.crt", __FILE__)
-      @http.ca_file     = opts[:ca_file] || campfire_ca_certs
+      @token   = token
+      @pass    = 'x'
+      @ca_file = opts[:ca_file]
+      @http    = http_for("https://#{subdomain}.campfirenow.com")
     end
 
-    def room_named name
-      r = rooms.find{|r| r["name"] == name }
+    def room_named(name)
+      r = room_data.find{|r| r["name"] == name }
       r ? Room.new(self, name, r["id"]) : nil
     end
 
     def rooms
+      room_data.map{|d| Room.new(self, d["name"], d["id"]) }
+    end
+
+    def room_data
       @http.start do |http|
         req = Net::HTTP::Get.new "/rooms.json"
         req['Content-Type'] = 'application/json'
@@ -60,7 +59,7 @@ module Sparks
       end
     end
 
-    def post room_id, message, type = nil
+    def post(room_id, message, type = nil)
       data = {'body' => message}
       data.merge!('type' => type) if type
       json = JSON.generate('message' => data)
@@ -73,24 +72,24 @@ module Sparks
       end
     end
 
-    def speak room_id, message
+    def speak(room_id, message)
       post room_id, message, 'TextMessage'
     end
     alias_method :say, :speak
 
-    def paste room_id, message
+    def paste(room_id, message)
       post room_id, message, 'PasteMessage'
     end
 
-    def play room_id, message
+    def play(room_id, message)
       post room_id, message, 'SoundMessage'
     end
-    
-    def tweet room_id, message
+
+    def tweet(room_id, message)
       post room_id, message, 'TweetMessage'
     end
 
-    def join room_id
+    def join(room_id)
       @http.start do |http|
         req = Net::HTTP::Post.new "/room/#{room_id}/join.xml"
         req.basic_auth token, pass
@@ -98,25 +97,34 @@ module Sparks
       end
     end
 
-    def watch room_id
-      uri = URI.parse('https://streaming.campfirenow.com')
-
-      x             = Net::HTTP.new(uri.host, uri.port)
-      x.use_ssl     = true
-      x.verify_mode = OpenSSL::SSL::VERIFY_NONE
-
-      x.start do |http|
+    def watch(room_id)
+      @http.join(room_id)
+      http_for("https://streaming.campfirenow.com").start do |http|
         req = Net::HTTP::Get.new "/room/#{room_id}/live.json"
         req.basic_auth token, pass
         http.request(req) do |res|
           res.read_body do |chunk|
-            unless chunk.strip.empty?
-              chunk.split("\r").each do |message|
-                yield JSON.parse(message)
-              end
+            next if chunk.strip.empty?
+            chunk.split("\r").each do |message|
+              yield JSON.parse(message)
             end
           end
         end
+      end
+    rescue => e
+      puts "gotta retry :("
+      raise e
+    end
+
+  private
+
+    def http_for(url)
+      uri = URI.parse(url)
+      Net::HTTP.new(uri.host, uri.port) do |http|
+        http.use_ssl = true
+        http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+        http.ca_file = @ca_file
+        http.ca_file ||= File.expand_path("../rapidssl.crt", __FILE__)
       end
     end
 
