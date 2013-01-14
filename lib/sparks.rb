@@ -140,21 +140,22 @@ module Sparks
       request.content_type = "application/json"
       request.basic_auth @token, "x"
 
+      retries ||= 0
       response = @http.request(uri, request)
       response.value   # raises if response is not 2xx
       parse_response(response)
 
-    rescue Net::HTTPRetriableError # response was 3xx
+    rescue Net::HTTPRetriableError => e # response was 3xx
       location = URI(response['location'])
       logger.info "Request redirected to #{location}"
       sleep 2
       req(location, body)
 
-    rescue Net::HTTPServerException, # response was 4xx
-        Net::HTTPFatalError,         # response was 5xx
-        Net::HTTP::Persistent::Error # request went wrong :P
-      # As far as I know, all the API requests should return 200. If they
-      # don't, chances seem high that something is temporarily broken.
+    rescue Net::HTTPServerException => e # response was 4xx
+      raise "Authorization failed: #{request.class}: #{request.body}"
+
+    rescue Net::HTTPFatalError, Net::HTTP::Persistent::Error => e
+      # Retry after 5xx responses or connection errors
       retries += 1
       logger.info "HTTP error: #{e.class}: #{e.message}"
       logger.info "Going to retry request in #{retries * 2}s"
