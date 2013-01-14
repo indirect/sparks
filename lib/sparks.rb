@@ -1,7 +1,6 @@
-require 'uri'
 require 'json'
-require 'net/https'
 require 'logger'
+require 'net/http/persistent'
 
 # sparks, a tiny Campfire library
 
@@ -20,32 +19,43 @@ module Sparks
       @id   = id
     end
 
+    def post(room_id, message, type = nil)
+      data = {'body' => message}
+      data.merge!('type' => type) if type
+      json = JSON.generate('message' => data)
+      @api.req("/room/#{room_id}/speak", json)
+    end
+
     def speak(message)
-      @api.post id, message, 'TextMessage'
+      post id, message, 'TextMessage'
     end
     alias_method :say, :speak
 
     def paste(message)
-      @api.post id, message, 'PasteMessage'
+      post id, message, 'PasteMessage'
     end
 
     def play(message)
-      @api.post id, message, 'SoundMessage'
+      post id, message, 'SoundMessage'
     end
 
     def tweet(message)
-      @api.post id, message, 'TweetMessage'
+      post id, message, 'TweetMessage'
     end
 
     def join
-      @api.req("/room/#{id}/join.json")
+      @api.req("/room/#{id}/join", :post)
+    end
+
+    def leave
+      @api.req("/room/#{id}/leave", :post)
     end
 
     def watch
-      puts "GONNA JOIN"
-      join
-      puts "zomg I'm in"
-      @api.watch(id){|message| yield message }
+      join # campfire won't let you stream until you join
+      @api.stream("/room/#{id}/live") do |message|
+        yield message
+      end
     end
 
     def inspect
@@ -58,16 +68,16 @@ module Sparks
     attr_reader :logger
 
     def initialize subdomain, token, opts = {}
-      @token   = token
-      @pass    = 'x'
-      @ca_file = opts[:ca_file]
-      @http    = http_for("https://#{subdomain}.campfirenow.com")
-      @stream  = http_for("https://streaming.campfirenow.com")
-      @logger  = Logger.new(STDOUT)
+      @base   = URI("https://#{subdomain}.campfirenow.com")
+      @token  = token
+      @logger = opts[:logger] || Logger.new(STDOUT)
+      @http   = Net::HTTP::Persistent.new("sparks")
+
+      @http.ca_file = opts[:ca_file] if opts[:ca_file]
     end
 
     def me
-      req("/users/me.json")
+      req("/users/me")
     end
 
     def room_named(name)
@@ -75,59 +85,93 @@ module Sparks
     end
 
     def rooms
-      req("/rooms.json")["rooms"].map do |d|
+      req("/rooms")["rooms"].map do |d|
         Room.new(self, d["name"], d["id"])
       end
     end
 
-    def post(room_id, message, type = nil)
-      data = {'body' => message}
-      data.merge!('type' => type) if type
-      json = JSON.generate('message' => data)
-      req("/room/#{room_id}/speak.json", json)
-    end
+    def stream(path)
+      # don't allow retries if we've never connected before.
+      retries ||= nil
 
-    def watch(room_id)
-      @streamer.start do |http|
-        req = Net::HTTP::Get.new "/room/#{room_id}/live.json"
-        req.basic_auth @token, @pass
-        http.request(req) do |res|
-          res.read_body do |chunk|
-            next if chunk.strip.empty?
-            chunk.split("\r").each do |message|
-              yield JSON.parse(message)
-            end
+      uri = URI("https://streaming.campfirenow.com") + (path + ".json")
+      logger.debug "Ready to stream from #{uri}"
+
+      request = Net::HTTP::Get.new(uri.path)
+      request.basic_auth @token, "x"
+
+      @http.request(uri, request) do |response|
+        logger.debug "Connected and streaming from #{path}"
+        # connected! allow retries.
+        retries = 0
+
+        # time to read us some streams
+        response.read_body do |chunk|
+          # Campfire keepalive pings
+          next if chunk == " "
+
+          # One or more JSON payloads per chunk
+          chunk.split("\r").each do |message|
+            yield JSON.parse(message)
           end
         end
       end
     rescue => e
-      puts "gotta retry :("
-      raise e
+      # pass through errors if we haven't ever connected
+      raise e unless retries
+
+      retries += 1
+      logger.error "Error while streaming. Trying again in #{retries * 2}s"
+      logger.error "#{e.class}: #{e.message}"
+      sleep retries * 2
+      retry
+    end
+
+    def req(uri, body = nil)
+      uri = @base + (uri + ".json") unless uri.is_a?(URI)
+      logger.debug "#{body ? 'POST' : 'GET'} #{uri}"
+
+      if body
+        request = Net::HTTP::Post.new(uri.path)
+        request.body = body unless body == :post
+      else
+        request = Net::HTTP::Get.new(uri.path)
+      end
+      request.content_type = "application/json"
+      request.basic_auth @token, "x"
+
+      response = @http.request(uri, request)
+      response.value   # raises if response is not 2xx
+      parse_response(response)
+
+    rescue Net::HTTPRetriableError # response was 3xx
+      location = URI(response['location'])
+      logger.info "Request redirected to #{location}"
+      sleep 2
+      req(location, body)
+
+    rescue Net::HTTPServerException, # response was 4xx
+        Net::HTTPFatalError,         # response was 5xx
+        Net::HTTP::Persistent::Error # request went wrong :P
+      # As far as I know, all the API requests should return 200. If they
+      # don't, chances seem high that something is temporarily broken.
+      retries += 1
+      logger.info "HTTP error: #{e.class}: #{e.message}"
+      logger.info "Going to retry request in #{retries * 2}s"
+      sleep retries * 2
+      retry
     end
 
   private
 
-    def http_for(url)
-      uri = URI.parse(url)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-      http.ca_file = @ca_file
-      http.ca_file ||= File.expand_path("../rapidssl.crt", __FILE__)
-      http
-    end
-
-    def req(path, json = nil)
-      res = @http.start do |http|
-        verb = json ? Net::HTTP::Post : Net::HTTP::Get
-        req = verb.new path
-        req['Content-Type'] = 'application/json'
-        req.basic_auth @token, @pass
-        res = json ? http.request(req, json) : http.request(req)
+    def parse_response(response)
+      if response.body.strip.empty?
+        true
+      else
+        JSON.parse(response.body)
       end
-      JSON.parse(res.body)
     rescue JSON::ParserError
-      logger.info "Couldn't parse response: #{res.body}"
+      logger.debug "Couldn't parse #{res.inspect}: #{res.body.inspect}"
       {}
     end
 
