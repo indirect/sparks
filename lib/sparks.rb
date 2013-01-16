@@ -116,7 +116,8 @@ module Sparks
           end
         end
       end
-    rescue => e
+    rescue Net::HTTP::Persistent::Error, Net::HTTPBadResponse,
+        Net::HTTPHeaderSyntaxError, Net::HTTPFatalError => e
       # pass through errors if we haven't ever connected
       raise e unless retries
 
