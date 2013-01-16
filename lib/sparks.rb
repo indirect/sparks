@@ -122,8 +122,8 @@ module Sparks
       raise e unless retries
 
       retries += 1
-      logger.error "Error while streaming. Trying again in #{retries * 2}s"
       logger.error "#{e.class}: #{e.message}"
+      logger.error "Trying to stream again in #{retries * 2}s"
       sleep retries * 2
       retry
     end
