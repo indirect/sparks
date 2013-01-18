@@ -85,7 +85,7 @@ module Sparks
     end
 
     def rooms
-      req("/rooms")["rooms"].map do |d|
+      @rooms ||= req("/rooms")["rooms"].map do |d|
         Room.new(self, d["name"], d["id"])
       end
     end
