@@ -80,8 +80,12 @@ module Sparks
       req("/users/me")
     end
 
-    def room_named(name)
-      rooms.find{|r| r.name == name }
+    def room(name_or_id)
+      if name_or_id.is_a?(String)
+        rooms.find{|r| r.name == name_or_id }
+      else
+        rooms.find{|r| r.id == name_or_id }
+      end
     end
 
     def rooms
