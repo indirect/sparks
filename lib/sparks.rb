@@ -77,7 +77,7 @@ module Sparks
     end
 
     def me
-      req("/users/me")
+      req("/users/me")["user"]
     end
 
     def room(name_or_id)
