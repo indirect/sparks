@@ -81,16 +81,13 @@ module Sparks
     end
 
     def room(name_or_id)
-      if name_or_id.is_a?(String)
-        rooms.find{|r| r.name == name_or_id }
-      else
-        rooms.find{|r| r.id == name_or_id }
-      end
+      room = rooms.find{|r| r.name == name_or_id }
+      room ||= rooms.find{|r| r.id == name_or_id.to_i }
     end
 
     def rooms
       @rooms ||= req("/rooms")["rooms"].map do |d|
-        Room.new(self, d["name"], d["id"])
+        Room.new(self, d["name"], d["id"].to_i)
       end
     end
 
