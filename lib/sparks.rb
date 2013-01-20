@@ -78,7 +78,7 @@ class Sparks
     request.basic_auth @token, "x"
 
     @http.request(uri, request) do |response|
-      logger.debug "Connected and streaming from #{path}"
+      logger.debug "Connected and streaming from room #{id}"
       # connected! allow retries.
       retries = 0
 
