@@ -18,6 +18,7 @@ class Sparks
     @logger = opts[:logger] || Logger.new(STDOUT)
     @http   = Net::HTTP::Persistent.new("sparks")
     @http.ca_file = opts[:ca_file] if opts[:ca_file]
+    @rooms ||= {}
   end
 
   def me
@@ -28,13 +29,14 @@ class Sparks
     req("/users/#{id}")["user"]
   end
 
-  def room(name_or_id)
-    room  = rooms.find{|r| r["name"] == name_or_id }
-    room || rooms.find{|r| r["id"] == name_or_id.to_i }
+  def room_named(name)
+    @rooms.find{|id, r| r["name"] == name }
   end
 
-  def rooms
-    @rooms ||= req("/rooms")["rooms"]
+  def room(id)
+    @rooms[id] ||= begin
+      req("/room/#{id.to_s}")["room"]
+    end
   end
 
   def join(id)
