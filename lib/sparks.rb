@@ -129,7 +129,9 @@ class Sparks
     req(location, body)
 
   rescue Net::HTTPServerException => e # response was 4xx
-    raise "Authorization failed: #{request.class}: #{request.body}"
+    msg = "Authorization failed: HTTP #{response.code}"
+    msg << ": " << request.body if request.body && !request.body.empty?
+    raise msg
 
   rescue Net::HTTPFatalError, Net::HTTP::Persistent::Error => e
     # Retry after 5xx responses or connection errors
