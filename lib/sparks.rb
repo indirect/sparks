@@ -94,11 +94,14 @@ class Sparks
         end
       end
     end
-  rescue Net::HTTP::Persistent::Error, Net::HTTPBadResponse,
-      Net::HTTPHeaderSyntaxError, Net::HTTPFatalError => e
+  rescue SystemCallError,           # All Errno errors
+      Net::HTTP::Persistent::Error, # Timeout, SSL, or connection error
+      Net::HTTPBadResponse,         # response wasn't 2xx
+      Net::HTTPHeaderSyntaxError,   # response header issue
+      Net::ProtocolError => e       # not http
     # pass through errors if we haven't ever connected
     raise e unless retries
-
+    # if we connected at least once, try, try, again
     retries += 1
     logger.error "#{e.class}: #{e.message}"
     logger.error "Trying to stream again in #{retries * 2}s"
@@ -135,10 +138,14 @@ class Sparks
     msg << ": " << request.body if request.body && !request.body.empty?
     raise msg
 
-  rescue Net::HTTPFatalError, Net::HTTP::Persistent::Error => e
-    # Retry after 5xx responses or connection errors
+  rescue SystemCallError,           # All Errno errors
+      Net::HTTP::Persistent::Error, # Timeout, SSL, or connection error
+      Net::HTTPBadResponse,         # response wasn't 2xx
+      Net::HTTPHeaderSyntaxError,   # response header issue
+      Net::ProtocolError => e       # not http
+    # Retry if something goes wrong
     retries += 1
-    logger.info "HTTP error: #{e.class}: #{e.message}"
+    logger.info "Request failed: #{e.class}: #{e.message}"
     logger.info "Going to retry request in #{retries * 2}s"
     sleep retries * 2
     retry
