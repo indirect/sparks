@@ -95,6 +95,7 @@ class Sparks
       end
     end
   rescue SystemCallError,           # All Errno errors
+      SocketError,                  # Errors from socket operations
       Net::HTTP::Persistent::Error, # Timeout, SSL, or connection error
       Net::HTTPBadResponse,         # response wasn't 2xx
       Net::HTTPHeaderSyntaxError,   # response header issue
