@@ -95,7 +95,8 @@ class Sparks
         parser << chunk
       end
     end
-  rescue SystemCallError,           # All Errno errors
+  rescue Yajl::ParseError,          # Bad JSON in the response
+      SystemCallError,              # All Errno errors
       SocketError,                  # Errors from socket operations
       Net::HTTP::Persistent::Error, # Timeout, SSL, or connection error
       Net::HTTPBadResponse,         # response wasn't 2xx
