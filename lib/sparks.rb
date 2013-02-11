@@ -1,4 +1,4 @@
-require 'json'
+require 'yajl'
 require 'logger'
 require 'net/http/persistent'
 
@@ -49,7 +49,7 @@ class Sparks
 
   def speak(id, message, type = 'TextMessage')
     data = {'body' => message, 'type' => type}
-    json = JSON.generate('message' => data)
+    json = Yajl.generate('message' => data)
     req("/room/#{id}/speak", json)
   end
   alias_method :say, :speak
@@ -84,14 +84,15 @@ class Sparks
       # connected! allow retries.
       retries = 0
 
+      # Set up a Yajl stream parser
+      parser = Yajl::Parser.new(:symbolize_keys => true)
+      parser.on_parse_complete = -> hash { yield hash }
+
+      # Feed chunks into the stream parser
       response.read_body do |chunk|
         # Campfire keepalive pings
         next if chunk == " "
-
-        # One or more JSON payloads per chunk
-        chunk.split("\r").each do |message|
-          yield JSON.parse(message)
-        end
+        parser << chunk
       end
     end
   rescue SystemCallError,           # All Errno errors
@@ -158,9 +159,9 @@ private
     if response.body.strip.empty?
       true
     else
-      JSON.parse(response.body)
+      Yajl.parse(response.body)
     end
-  rescue JSON::ParserError
+  rescue Yajl::ParseError
     logger.debug "Couldn't parse #{res.inspect}: #{res.body.inspect}"
     {}
   end
