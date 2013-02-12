@@ -1,6 +1,6 @@
-require 'yajl'
 require 'logger'
 require 'net/http/persistent'
+require 'yajl'
 
 # sparks, a tiny Campfire library
 
@@ -30,7 +30,7 @@ class Sparks
   end
 
   def room_named(name)
-    @rooms.find{|id, r| r["name"] == name }
+    req("/rooms")["rooms"].find{|r| r["name"] == name }
   end
 
   def room(id)
@@ -49,7 +49,7 @@ class Sparks
 
   def speak(id, message, type = 'TextMessage')
     data = {'body' => message, 'type' => type}
-    json = Yajl.generate('message' => data)
+    json = Yajl::Encoder.encode('message' => data)
     req("/room/#{id}/speak", json)
   end
   alias_method :say, :speak
@@ -160,7 +160,7 @@ private
     if response.body.strip.empty?
       true
     else
-      Yajl.parse(response.body)
+      Yajl::Parser.parse(response.body)
     end
   rescue Yajl::ParseError
     logger.debug "Couldn't parse #{res.inspect}: #{res.body.inspect}"
