@@ -26,16 +26,16 @@ class Sparks
   end
 
   def user(id)
-    req("/users/#{id}")["user"]
+    req("/users/#{id}")[:user]
   end
 
   def room_named(name)
-    req("/rooms")["rooms"].find{|r| r["name"] == name }
+    req("/rooms")[:rooms].find{|r| r[:name] == name }
   end
 
   def room(id)
     @rooms[id] ||= begin
-      req("/room/#{id.to_s}")["room"]
+      req("/room/#{id.to_s}")[:room]
     end
   end
 
@@ -160,7 +160,7 @@ private
     if response.body.strip.empty?
       true
     else
-      Yajl::Parser.parse(response.body)
+      Yajl::Parser.parse(response.body, :symbolize_keys => true)
     end
   rescue Yajl::ParseError
     logger.debug "Couldn't parse #{res.inspect}: #{res.body.inspect}"
