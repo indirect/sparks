@@ -4,7 +4,9 @@
 
   - broke everything. sorry.
   - streaming now works for more than a few minutes!
-  - uses net-http-persistent to make all requests much faster
+  - handles both very small and very large JSON objects
+  - uses Yajl for streaming JSON parsing
+  - uses net-http-persistent to make repeated requests much faster
   - removed Room and Campfire classes, now super...minimal. or something.
 
 ## Version 0.3 (7 October 2011)
