@@ -18,6 +18,7 @@ class Sparks
     @logger = opts[:logger] || Logger.new(STDOUT)
     @http   = Net::HTTP::Persistent.new("sparks")
     @http.ca_file = opts[:ca_file] if opts[:ca_file]
+    @http.verify_mode = opts[:verify_mode] if opts[:verify_mode]
     @rooms ||= {}
   end
 
