@@ -1,14 +1,16 @@
 require 'logger'
-require 'net/http/persistent'
+require 'http'
 require 'yajl'
+require 'base64'
 
 # sparks, a tiny Campfire library
 
 # Usage:
-#   c = Sparks.new('subdomain', 'abc123')
-#   r = c.room "Room Name"
-#   c.say r["id"], "hi there"
-#   c.paste r["id"], "class Foo\nend"
+#   c = Sparks.new('subdomain', 'abc123')3
+#   r = c.room_named "Room Name"
+#   c.say r[:id], "hi there"
+#   c.paste r[:id], "class Foo\nend"
+#   c.watch(r[:id]) {|message| p message}
 class Sparks
   attr_reader :logger
 
@@ -16,9 +18,6 @@ class Sparks
     @base   = URI("https://#{subdomain}.campfirenow.com")
     @token  = token
     @logger = opts[:logger] || Logger.new(STDOUT)
-    @http   = Net::HTTP::Persistent.new("sparks")
-    @http.ca_file = opts[:ca_file] if opts[:ca_file]
-    @http.verify_mode = opts[:verify_mode] if opts[:verify_mode]
     @rooms ||= {}
   end
 
@@ -77,32 +76,26 @@ class Sparks
     uri = URI("https://streaming.campfirenow.com") + "/room/#{id}/live.json"
     logger.debug "Ready to stream from #{uri}"
 
-    request = Net::HTTP::Get.new(uri.path)
-    request.basic_auth @token, "x"
+    response = HTTP.with_headers(:authorization => authorization).stream.get(uri.to_s)
 
-    @http.request(uri, request) do |response|
-      logger.debug "Connected and streaming from room #{id}"
-      # connected! allow retries.
-      retries = 0
+    # connected! allow retries.
+    retries = 0
 
-      # Set up a Yajl stream parser
-      parser = Yajl::Parser.new(:symbolize_keys => true)
-      parser.on_parse_complete = -> hash { yield hash }
+    logger.debug "Connected and streaming from room #{id}"
 
-      # Feed chunks into the stream parser
-      response.read_body do |chunk|
-        # Campfire keepalive pings
-        next if chunk == " "
-        parser << chunk
-      end
+    # Set up a Yajl stream parser
+    parser = Yajl::Parser.new(:symbolize_keys => true)
+    parser.on_parse_complete = -> hash { yield hash }
+
+    # Feed chunks into the stream parser
+    response.body do |chunk|
+      # Campfire keepalive pings
+      next if chunk == " "
+      parser << chunk
     end
   rescue Yajl::ParseError,          # Bad JSON in the response
       SystemCallError,              # All Errno errors
-      SocketError,                  # Errors from socket operations
-      Net::HTTP::Persistent::Error, # Timeout, SSL, or connection error
-      Net::HTTPBadResponse,         # response wasn't 2xx
-      Net::HTTPHeaderSyntaxError,   # response header issue
-      Net::ProtocolError => e       # not http
+      SocketError                  # Errors from socket operations
     # pass through errors if we haven't ever connected
     raise e unless retries
     # if we connected at least once, try, try, again
@@ -117,36 +110,24 @@ class Sparks
     uri = @base + (uri + ".json") unless uri.is_a?(URI)
     logger.debug "#{body ? 'POST' : 'GET'} #{uri}"
 
-    if body
-      request = Net::HTTP::Post.new(uri.path)
-      request.body = body unless body == :post
-    else
-      request = Net::HTTP::Get.new(uri.path)
-    end
-    request.content_type = "application/json"
-    request.basic_auth @token, "x"
+    request = HTTP.with({
+      :content_type => "application/json",
+      :authorization => authorization
+    }).stream
 
     retries ||= 0
-    response = @http.request(uri, request)
-    response.value   # raises if response is not 2xx
-    parse_response(response)
 
-  rescue Net::HTTPRetriableError => e # response was 3xx
-    location = URI(response['location'])
-    logger.info "Request redirected to #{location}"
-    sleep 2
-    req(location, body)
+    response = if body
+      options = {}
+      options.merge!({:body => body}) unless body == :post
 
-  rescue Net::HTTPServerException => e # response was 4xx
-    msg = "Authorization failed: HTTP #{response.code}"
-    msg << ": " << request.body if request.body && !request.body.empty?
-    raise msg
+      request.post(uri.to_s, options)
+    else
+      request.get(uri.to_s)
+    end
 
-  rescue SystemCallError,           # All Errno errors
-      Net::HTTP::Persistent::Error, # Timeout, SSL, or connection error
-      Net::HTTPBadResponse,         # response wasn't 2xx
-      Net::HTTPHeaderSyntaxError,   # response header issue
-      Net::ProtocolError => e       # not http
+    parse_response(response.body)
+  rescue SystemCallError           # All Errno errors
     # Retry if something goes wrong
     retries += 1
     logger.info "Request failed: #{e.class}: #{e.message}"
@@ -157,14 +138,18 @@ class Sparks
 
 private
 
+  def authorization
+    "Basic: #{Base64.encode64([@token, 'x'].join(':'))}".strip
+  end
+
   def parse_response(response)
-    if response.body.strip.empty?
+    if response.strip.empty?
       true
     else
-      Yajl::Parser.parse(response.body, :symbolize_keys => true)
+      Yajl::Parser.parse(response, :symbolize_keys => true)
     end
   rescue Yajl::ParseError
-    logger.debug "Couldn't parse #{res.inspect}: #{res.body.inspect}"
+    logger.debug "Couldn't parse #{response.inspect}"
     {}
   end
 
