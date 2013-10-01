@@ -9,7 +9,7 @@ The `watch` method tends to succumb to network issues after a few hours, and is 
 
 ### Contributors
 
-Ben Bleything (@bleything) for the :ca_file option
+Ben Bleything (@bleything) for the :ca_file option  
 James Cox (@imajes) for the #play and #tweet methods
 
 #### Thanks to
