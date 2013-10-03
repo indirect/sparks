@@ -18,6 +18,8 @@ class Sparks
     @base   = URI("https://#{subdomain}.campfirenow.com")
     @token  = token
     @logger = opts[:logger] || Logger.new(STDOUT)
+    @socket_class = opts.fetch(:socket_class, TCPSocket)
+    @ssl_socket_class = opts.fetch(:ssl_socket_class, OpenSSL::SSL::SSLSocket)
     @rooms ||= {}
   end
 
@@ -76,7 +78,7 @@ class Sparks
     uri = URI("https://streaming.campfirenow.com") + "/room/#{id}/live.json"
     logger.debug "Ready to stream from #{uri}"
 
-    response = HTTP.with_headers(:authorization => authorization).stream.get(uri.to_s)
+    response = HTTP.with_headers(:authorization => authorization).stream.get(uri.to_s, socket_options)
 
     # connected! allow retries.
     retries = 0
@@ -121,9 +123,9 @@ class Sparks
       options = {}
       options.merge!({:body => body}) unless body == :post
 
-      request.post(uri.to_s, options)
+      request.post(uri.to_s, options.merge(socket_options))
     else
-      request.get(uri.to_s)
+      request.get(uri.to_s, socket_options)
     end
 
     parse_response(response.body)
@@ -151,6 +153,10 @@ private
   rescue Yajl::ParseError
     logger.debug "Couldn't parse #{response.inspect}"
     {}
+  end
+
+  def socket_options
+    {:socket_class => @socket_class, :ssl_socket_class => @ssl_socket_class}
   end
 
 end
